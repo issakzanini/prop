@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Constant-Speed Propeller — ATPL(A) Explainer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:      #f4f5f7;
+    --surface: #ffffff;
+    --surf2:   #eef0f3;
+    --border:  rgba(0,0,0,0.09);
+    --text:    #1a1d26;
+    --muted:   #6b7080;
+    --faint:   #a0a6b5;
+    --thr:     #c94f22;
+    --rpm:     #4a42b0;
+    --green:   #0e7a58;
+    --amber:   #b07a10;
+    --red:     #a82020;
+    --mono:    'Space Mono', monospace;
+    --sans:    'DM Sans', sans-serif;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); min-height: 100vh; overflow-x: hidden; }
+  body::before {
+    content: ''; position: fixed; inset: 0; z-index: 0;
+    background-image: linear-gradient(rgba(0,0,0,0.028) 1px, transparent 1px), linear-gradient(90deg, rgba(0,0,0,0.028) 1px, transparent 1px);
+    background-size: 36px 36px; pointer-events: none;
+  }
+  .page { position: relative; z-index: 1; max-width: 840px; margin: 0 auto; padding: 32px 20px 60px; }
+
+  /* HEADER */
+  header { margin-bottom: 28px; }
+  .header-tag { font-family: var(--mono); font-size: 10px; letter-spacing: .18em; color: var(--green); text-transform: uppercase; margin-bottom: 10px; }
+  h1 { font-family: var(--mono); font-size: clamp(17px, 3.5vw, 26px); font-weight: 700; color: var(--text); line-height: 1.3; margin-bottom: 10px; }
+  h1 em { color: var(--thr); font-style: normal; }
+  .subtitle { font-size: 14px; color: var(--muted); line-height: 1.75; max-width: 600px; }
+
+  /* PHASE BADGE */
+  .phase-row { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+  #phase-badge { font-family: var(--mono); font-size: 10px; letter-spacing: .12em; padding: 4px 12px; border-radius: 20px; text-transform: uppercase; transition: background .4s, color .4s; }
+
+  /* CANVAS */
+  #prop { width: 100%; height: 240px; display: block; border-radius: 12px; border: 1px solid var(--border); margin-bottom: 14px; background: #fff; }
+
+  /* MAIN GRID */
+  .main-grid { display: grid; grid-template-columns: 210px 1fr; gap: 14px; margin-bottom: 14px; }
+  @media(max-width:580px){ .main-grid { grid-template-columns: 1fr; } }
+
+  /* PANEL */
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+  .panel-title { font-family: var(--mono); font-size: 10px; letter-spacing: .14em; color: var(--faint); text-transform: uppercase; margin-bottom: 14px; }
+
+  /* LEVERS */
+  .lever-wrap { display: flex; gap: 22px; justify-content: center; align-items: flex-end; }
+  .lever-col  { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .lever-label { font-family: var(--mono); font-size: 9px; letter-spacing: .08em; color: var(--muted); text-align: center; line-height: 1.55; }
+  .lever-track { width: 30px; height: 134px; background: var(--surf2); border: 1px solid var(--border); border-radius: 15px; position: relative; cursor: pointer; }
+  .lever-fill  { position: absolute; bottom: 0; left: 0; right: 0; border-radius: 15px; opacity: 0.18; transition: height .05s; }
+  .lever-thumb { width: 42px; height: 22px; border-radius: 6px; position: absolute; left: 50%; transform: translateX(-50%); cursor: grab; display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: 9px; font-weight: 700; letter-spacing: .08em; user-select: none; z-index: 2; color: #fff; }
+  .lever-thumb:active { cursor: grabbing; }
+  .lever-val { font-family: var(--mono); font-size: 11px; color: var(--text); text-align: center; min-width: 72px; line-height: 1.6; }
+
+  /* GAUGES */
+  .gauges-panel { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; align-items: start; }
+  .gauge-wrap   { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .gauge-svg    { width: 100%; max-width: 100px; display: block; }
+  .gauge-readout { text-align: center; }
+  .gauge-val  { font-family: var(--mono); font-size: 20px; font-weight: 700; line-height: 1; color: var(--text); }
+  .gauge-unit { font-family: var(--mono); font-size: 10px; color: var(--faint); margin-top: 2px; }
+  .gauge-name { font-family: var(--mono); font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); margin-top: 2px; }
+
+  /* STATS ROW */
+  .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
+  @media(max-width:560px){ .stats-row { grid-template-columns: repeat(2,1fr); } }
+  .stat { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 10px 10px; }
+  .stat-label { font-family: var(--mono); font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); margin-bottom: 5px; }
+  .stat-num   { font-family: var(--mono); font-size: 22px; font-weight: 700; color: var(--text); line-height: 1; }
+  .stat-unit  { font-family: var(--mono); font-size: 10px; color: var(--muted); margin-left: 2px; }
+  .stat-sub   { font-family: var(--mono); font-size: 9px; letter-spacing: .06em; margin-top: 5px; font-weight: 700; text-transform: uppercase; transition: color .3s; }
+
+  /* EXPLAIN BOX */
+  .explain-box { background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--green); border-radius: 0 12px 12px 0; padding: 16px 18px; margin-bottom: 14px; transition: border-left-color .4s; min-height: 88px; }
+  .explain-title { font-family: var(--mono); font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--text); margin-bottom: 6px; }
+  .explain-text  { font-size: 13px; line-height: 1.78; color: var(--muted); }
+
+  /* WARNING BOX */
+  .warn-box { display: none; background: #fff5f5; border: 1px solid #f0bcbc; border-left: 3px solid var(--red); border-radius: 0 12px 12px 0; padding: 14px 18px; margin-bottom: 14px; }
+  .warn-box.visible { display: block; }
+  .warn-title { font-family: var(--mono); font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--red); margin-bottom: 5px; }
+  .warn-text  { font-size: 13px; line-height: 1.78; color: #7a2a2a; }
+
+  /* HOW TO USE */
+  .howto { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; margin-bottom: 28px; }
+  .howto-title { font-family: var(--mono); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--faint); margin-bottom: 10px; }
+  .howto-items { display: flex; flex-direction: column; gap: 7px; }
+  .howto-item  { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; color: var(--muted); line-height: 1.65; }
+  .howto-dot   { width: 6px; height: 6px; border-radius: 50%; background: var(--green); margin-top: 7px; flex-shrink: 0; }
+
+  /* FOOTER */
+  footer { border-top: 1px solid var(--border); padding-top: 20px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+  .footer-credit { font-family: var(--mono); font-size: 11px; color: var(--muted); line-height: 1.7; }
+  .footer-credit strong { color: var(--text); }
+  .footer-credit a { color: var(--green); text-decoration: none; }
+  .footer-credit a:hover { text-decoration: underline; }
+  .footer-badge { font-family: var(--mono); font-size: 9px; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); border: 1px solid var(--border); padding: 5px 12px; border-radius: 20px; }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header>
+    <div class="header-tag">ATPL(A) · Piston Engine Systems · Propeller Theory</div>
+    <h1>Constant-Speed <em>Propeller</em><br>Interactive Explainer</h1>
+    <p class="subtitle">Drag the throttle and prop levers to see how manifold pressure, governor response, and blade pitch interact in a piston-engine aircraft. Incorrect lever combinations are flagged with an ATPL-level explanation.</p>
+  </header>
+
+  <div class="phase-row">
+    <span id="phase-badge" style="background:#d6f0e6;color:#0e7a58">Climb</span>
+    <span style="font-family:var(--mono);font-size:10px;color:var(--faint)">current flight phase</span>
+  </div>
+
+  <canvas id="prop"></canvas>
+
+  <div class="main-grid">
+
+    <div class="panel">
+      <div class="panel-title">Cockpit levers</div>
+      <div class="lever-wrap">
+        <div class="lever-col">
+          <div class="lever-label">Throttle<br>Manifold<br>Pressure</div>
+          <div class="lever-track" id="thr-track">
+            <div class="lever-fill" id="thr-fill" style="background:var(--thr)"></div>
+            <div class="lever-thumb" id="thr-thumb" style="background:var(--thr)">THR</div>
+          </div>
+          <div class="lever-val"><span id="map-val">25</span><br><span style="font-size:9px;color:var(--faint)">inHg</span></div>
+        </div>
+        <div class="lever-col">
+          <div class="lever-label">Prop lever<br>RPM<br>select</div>
+          <div class="lever-track" id="prp-track">
+            <div class="lever-fill" id="prp-fill" style="background:var(--rpm)"></div>
+            <div class="lever-thumb" id="prp-thumb" style="background:var(--rpm)">RPM</div>
+          </div>
+          <div class="lever-val"><span id="rpm-sel-val">2500</span><br><span style="font-size:9px;color:var(--faint)">RPM sel.</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Instrument panel</div>
+      <div class="gauges-panel">
+
+        <div class="gauge-wrap">
+          <svg class="gauge-svg" viewBox="0 0 100 72">
+            <path d="M 8 64 A 46 46 0 0 1 92 64" fill="none" stroke="#e4e6ea" stroke-width="11" stroke-linecap="round"/>
+            <path id="g-map-arc" d="M 8 64 A 46 46 0 0 1 92 64" fill="none" stroke="var(--thr)" stroke-width="11" stroke-linecap="round" stroke-dasharray="144" stroke-dashoffset="43"/>
+            <text x="50" y="52" text-anchor="middle" font-family="Space Mono,monospace" font-size="8" fill="#a0a6b5">MAP</text>
+          </svg>
+          <div class="gauge-readout">
+            <div class="gauge-val"><span id="g-map">25</span></div>
+            <div class="gauge-unit">inHg</div>
+            <div class="gauge-name">Manifold pressure</div>
+          </div>
+        </div>
+
+        <div class="gauge-wrap">
+          <svg class="gauge-svg" viewBox="0 0 100 72">
+            <path d="M 8 64 A 46 46 0 0 1 92 64" fill="none" stroke="#e4e6ea" stroke-width="11" stroke-linecap="round"/>
+            <path id="g-rpm-arc" d="M 8 64 A 46 46 0 0 1 92 64" fill="none" stroke="var(--rpm)" stroke-width="11" stroke-linecap="round" stroke-dasharray="144" stroke-dashoffset="43"/>
+            <text x="50" y="52" text-anchor="middle" font-family="Space Mono,monospace" font-size="8" fill="#a0a6b5">RPM</text>
+          </svg>
+          <div class="gauge-readout">
+            <div class="gauge-val"><span id="g-rpm">2500</span></div>
+            <div class="gauge-unit">RPM</div>
+            <div class="gauge-name">Engine speed</div>
+          </div>
+        </div>
+
+        <div class="gauge-wrap">
+          <svg class="gauge-svg" viewBox="0 0 100 72">
+            <path d="M 8 64 A 46 46 0 0 1 92 64" fill="none" stroke="#e4e6ea" stroke-width="11" stroke-linecap="round"/>
+            <path id="g-pwr-arc" d="M 8 64 A 46 46 0 0 1 92 64" fill="none" stroke="var(--green)" stroke-width="11" stroke-linecap="round" stroke-dasharray="144" stroke-dashoffset="43"/>
+            <text x="50" y="52" text-anchor="middle" font-family="Space Mono,monospace" font-size="8" fill="#a0a6b5">PWR</text>
+          </svg>
+          <div class="gauge-readout">
+            <div class="gauge-val"><span id="g-pwr">75</span></div>
+            <div class="gauge-unit">%</div>
+            <div class="gauge-name">Power output</div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <div class="stats-row">
+    <div class="stat">
+      <div class="stat-label">Manifold pressure</div>
+      <div><span class="stat-num" id="s-map">25</span><span class="stat-unit">inHg</span></div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Actual RPM</div>
+      <div><span class="stat-num" id="s-rpm">2500</span></div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Blade pitch</div>
+      <div><span class="stat-num" id="s-pitch">14</span><span class="stat-unit">°</span></div>
+      <div class="stat-sub" id="pitch-type" style="color:var(--green)">Fine pitch</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Power</div>
+      <div><span class="stat-num" id="s-power">75</span><span class="stat-unit">%</span></div>
+    </div>
+  </div>
+
+  <div class="explain-box" id="explain-box">
+    <div class="explain-title" id="explain-title">What's happening</div>
+    <div class="explain-text" id="explain-text">Drag the throttle (THR) and prop lever (RPM) to see the system respond. Push both forward for climb power, pull both back for efficient cruise.</div>
+  </div>
+
+  <div class="warn-box" id="warn-box">
+    <div class="warn-title" id="warn-title">Incorrect lever configuration</div>
+    <div class="warn-text" id="warn-text"></div>
+  </div>
+
+  <div class="howto">
+    <div class="howto-title">How to use this</div>
+    <div class="howto-items">
+      <div class="howto-item"><div class="howto-dot"></div><span>Drag the <strong style="color:var(--thr)">THR lever</strong> to change manifold pressure — this controls how much air-fuel charge the engine receives per stroke.</span></div>
+      <div class="howto-item"><div class="howto-dot"></div><span>Drag the <strong style="color:var(--rpm)">RPM lever</strong> to set the governor's target RPM. The constant-speed unit then automatically adjusts blade pitch to hold exactly that RPM.</span></div>
+      <div class="howto-item"><div class="howto-dot"></div><span>Watch the propeller: <strong style="color:var(--green)">fine pitch</strong> blades appear thin (edge-on to airflow). <strong style="color:var(--rpm)">Coarse pitch</strong> blades open up their faces — more air mass per revolution at lower RPM.</span></div>
+      <div class="howto-item"><div class="howto-dot"></div><span>Try setting <strong>high throttle with low RPM</strong>, or <strong>low throttle with high RPM</strong> — the red warning box explains the ATPL-level hazard of each wrong combination.</span></div>
+    </div>
+  </div>
+
+  <footer>
+    <div class="footer-credit">
+      Made by <strong><a href="https://www.linkedin.com/in/issak-zanini-957897168/" target="_blank">Issak Zanini</a></strong> with <a href="https://claude.ai" target="_blank">Claude</a> (Anthropic)<br>
+      <span style="font-size:10px">ATPL(A) Study Tool · Constant-Speed Propeller Systems</span>
+    </div>
+    <div class="footer-badge">ATPL(A) · Interactive Explainer</div>
+  </footer>
+
+</div>
+<script>
+(function(){
+  const propCanvas = document.getElementById('prop');
+  const ctx = propCanvas.getContext('2d');
+  let PW, PH = 240;
+
+  function resizeProp(){
+    PW = propCanvas.parentElement.clientWidth || 840;
+    propCanvas.width  = PW * devicePixelRatio;
+    propCanvas.height = PH * devicePixelRatio;
+    propCanvas.style.height = PH + 'px';
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.scale(devicePixelRatio, devicePixelRatio);
+  }
+  resizeProp();
+  window.addEventListener('resize', resizeProp);
+
+  let thrPct = 0.72, propPct = 0.77;
+  let spin = 0, lastT = 0;
+  let dispMAP = 25, dispRPM = 2500, dispPitch = 14, dispPower = 75;
+
+  function getValues(){
+    const MAP    = 10 + thrPct * 20;
+    const rpmSel = 1800 + propPct * 900;
+    const power  = (thrPct * 0.65 + propPct * 0.35) * 100;
+    const pitch  = 8 + (1 - propPct) * 37 + (1 - thrPct) * 5;
+    return { MAP, rpmSel, power, pitch };
+  }
+
+  function getPhase(){
+    if(thrPct > 0.6 && propPct > 0.6)   return 'climb';
+    if(thrPct < 0.45 && propPct < 0.45) return 'cruise';
+    return 'transition';
+  }
+
+  function getWarning(){
+    const highThr = thrPct > 0.68;
+    const lowThr  = thrPct < 0.38;
+    const highRPM = propPct > 0.68;
+    const lowRPM  = propPct < 0.38;
+
+    if(highThr && lowRPM) return {
+      title: 'High MAP + Low RPM — Risk of detonation',
+      text:  'You have selected high manifold pressure with a low RPM setting. This is the most dangerous combination in a piston engine: high cylinder pressures combined with a slow-turning engine produce abnormally high peak pressures, leading to detonation ("pinking") and potential engine damage. ATPL rule: always reduce throttle before reducing RPM, and always increase RPM before increasing throttle.'
+    };
+    if(lowThr && highRPM) return {
+      title: 'Low MAP + High RPM — Engine braking, poor efficiency',
+      text:  'You have set low manifold pressure with a high RPM. The propeller blades are at fine pitch spinning fast, but the engine is producing very little power — the propeller loads the engine heavily for minimal thrust. This wastes fuel and causes unnecessary engine wear. ATPL rule: for cruise descent, reduce RPM before reducing throttle (or simultaneously). Never leave high RPM with a near-closed throttle for extended periods.'
+    };
+    return null;
+  }
+
+  function getExplanation(phase, v){
+    const warn = getWarning();
+    if(thrPct > 0.85 && propPct > 0.85) return {
+      title: 'Full power — takeoff / initial climb',
+      text:  `Both levers fully forward. MAP is ${v.MAP} inHg — maximum air-fuel charge per stroke. The governor holds blades at fine pitch (${v.pitch}°), allowing the engine to spin at maximum RPM and produce maximum thrust. This is the correct setting for the ground roll and initial climb phase.`,
+      color: '#c94f22'
+    };
+    if(phase === 'climb') return {
+      title: 'Climb power setting',
+      text:  `Throttle delivers ${v.MAP} inHg MAP, providing good combustion energy. The prop lever targets ${Math.round(v.rpmSel)} RPM. The constant-speed unit holds blades at fine pitch (${v.pitch}°), keeping engine load matched to the selected RPM while producing strong thrust to gain altitude.`,
+      color: '#0e7a58'
+    };
+    if(phase === 'cruise') return {
+      title: 'Cruise power — efficient flight',
+      text:  `Throttle reduced to ${v.MAP} inHg — a deliberate reduction in air-fuel charge. The prop lever selects only ${Math.round(v.rpmSel)} RPM. The governor increases blade pitch to ${v.pitch}° (coarse) to hold that lower RPM. Coarser blades accelerate a larger air mass per revolution at lower slipstream velocity — this is maximum Froude propulsive efficiency, and the basis of the ATPL cruise power philosophy.`,
+      color: '#4a42b0'
+    };
+    if(warn) return {
+      title: 'Incorrect combination — see warning below',
+      text:  `MAP is ${v.MAP} inHg with governor targeting ${Math.round(v.rpmSel)} RPM. This lever position creates an operationally unsafe or inefficient condition. The red warning box below explains the ATPL implications.`,
+      color: '#a82020'
+    };
+    return {
+      title: 'Transition — governor actively adjusting',
+      text:  `MAP is ${v.MAP} inHg, targeting ${Math.round(v.rpmSel)} RPM. The governor flyweights sense the RPM error and move the pilot valve, directing engine oil pressure to reposition the blade pitch mechanism to ${v.pitch}°. In a real aircraft this transient lasts only a few seconds.`,
+      color: '#b07a10'
+    };
+  }
+
+  function setArc(id, pct){
+    const total = 144;
+    const off = total * (1 - Math.max(0, Math.min(1, pct)));
+    document.getElementById(id).setAttribute('stroke-dashoffset', off.toFixed(1));
+  }
+
+  function lerp(a,b,t){ return a + (b-a)*t; }
+
+  function drawProp(pitchDeg){
+    const cx = PW * 0.5, cy = PH * 0.5;
+    const BLEN = Math.min(PH * 0.37, 88);
+    const BROOT = 28, BTIP = 9, HUBR = 24;
+    const pitchRad = pitchDeg * Math.PI / 180;
+    const vis = Math.sin(pitchRad);
+    const t2  = Math.max(0, Math.min(1, (pitchDeg - 8) / 37));
+
+    ctx.clearRect(0,0,PW,PH);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0,0,PW,PH);
+
+    // background grid
+    ctx.strokeStyle = 'rgba(0,0,0,0.04)';
+    ctx.lineWidth = 1;
+    for(let x=0;x<PW;x+=36){ ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,PH);ctx.stroke(); }
+    for(let y=0;y<PH;y+=36){ ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(PW,y);ctx.stroke(); }
+
+    // airflow dashes
+    const speed = 1 - t2 * 0.4;
+    ctx.strokeStyle = `rgba(60,120,220,${0.10 + speed*0.08})`;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([7,14]);
+    for(let y=22;y<PH;y+=30){ ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(PW*0.36,y);ctx.stroke(); }
+    ctx.setLineDash([]);
+
+    // blades
+    for(let i=0;i<3;i++){
+      const angle = spin + (i/3)*Math.PI*2;
+      ctx.save();
+      ctx.translate(cx,cy);
+      ctx.rotate(angle);
+      const rw = BROOT*vis + 3.5;
+      const tw = BTIP *vis + 1.5;
+      const r  = Math.round(29  + t2*54);
+      const g  = Math.round(158 - t2*39);
+      const bv = Math.round(117 + t2*66);
+      ctx.beginPath();
+      ctx.moveTo(-rw/2, HUBR);
+      ctx.lineTo(-tw/2, HUBR+BLEN);
+      ctx.lineTo( tw/2, HUBR+BLEN);
+      ctx.lineTo( rw/2, HUBR);
+      ctx.closePath();
+      ctx.fillStyle = `rgb(${r},${g},${bv})`;
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(0,0,0,0.12)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      if(vis > 0.08){
+        ctx.beginPath();
+        ctx.moveTo(-rw/5, HUBR+8);
+        ctx.lineTo(-tw/5, HUBR+BLEN-18);
+        ctx.lineWidth = rw*0.16*vis;
+        ctx.strokeStyle = `rgba(255,255,255,${0.32*vis})`;
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    // hub
+    const grd = ctx.createRadialGradient(cx-8,cy-8,2,cx,cy,HUBR);
+    grd.addColorStop(0,'#ddd'); grd.addColorStop(1,'#666');
+    ctx.beginPath(); ctx.arc(cx,cy,HUBR,0,Math.PI*2);
+    ctx.fillStyle = grd; ctx.fill();
+    ctx.strokeStyle='#444'; ctx.lineWidth=1.5; ctx.stroke();
+    ctx.beginPath(); ctx.arc(cx,cy,6,0,Math.PI*2); ctx.fillStyle='#333'; ctx.fill();
+
+    // pitch angle arc + label
+    const arcR = BLEN*0.5+10;
+    ctx.save();
+    ctx.translate(cx,cy);
+    ctx.strokeStyle='rgba(140,90,10,0.2)'; ctx.lineWidth=1; ctx.setLineDash([4,4]);
+    ctx.beginPath(); ctx.moveTo(0,-HUBR); ctx.lineTo(0,-(HUBR+BLEN+4)); ctx.stroke(); ctx.setLineDash([]);
+    ctx.beginPath(); ctx.arc(0,0,arcR,-Math.PI/2,-Math.PI/2+pitchRad);
+    ctx.strokeStyle='rgba(140,90,10,0.85)'; ctx.lineWidth=2; ctx.stroke();
+    const ma = -Math.PI/2 + pitchRad/2;
+    ctx.fillStyle='#7a5000'; ctx.font='bold 12px Space Mono,monospace'; ctx.textAlign='center';
+    ctx.fillText(Math.round(pitchDeg)+'°', Math.cos(ma)*(arcR+16), Math.sin(ma)*(arcR+16));
+    ctx.restore();
+
+    // corner labels
+    ctx.fillStyle='rgba(0,0,0,0.22)'; ctx.font='11px Space Mono,monospace';
+    ctx.textAlign='left';  ctx.fillText('← airflow', 12, PH-12);
+    ctx.textAlign='right'; ctx.fillText('~'+Math.round(dispRPM)+' RPM', PW-12, PH-12);
+
+    // top-centre pitch name
+    const pr = Math.round(pitchDeg);
+    const pLabel = pr < 22 ? 'FINE PITCH' : pr < 33 ? 'MID PITCH' : 'COARSE PITCH';
+    const pCol   = pr < 22 ? '#0e7a58'    : pr < 33 ? '#b07a10'    : '#4a42b0';
+    ctx.fillStyle=pCol; ctx.textAlign='center'; ctx.font='bold 10px Space Mono,monospace';
+    ctx.fillText(pLabel, PW/2, 18);
+  }
+
+  function loop(ts){
+    requestAnimationFrame(loop);
+    const dt = Math.min((ts-lastT)/1000, 0.05); lastT = ts;
+    const v = getValues();
+    dispMAP   = lerp(dispMAP,   v.MAP,    0.05);
+    dispRPM   = lerp(dispRPM,   v.rpmSel, 0.04);
+    dispPitch = lerp(dispPitch, v.pitch,  0.04);
+    dispPower = lerp(dispPower, v.power,  0.05);
+
+    const mr = Math.round(dispMAP);
+    const rr = Math.round(dispRPM);
+    const pr = Math.round(dispPitch);
+    const wr = Math.round(dispPower);
+
+    document.getElementById('s-map').textContent      = mr;
+    document.getElementById('s-rpm').textContent      = rr;
+    document.getElementById('s-pitch').textContent    = pr;
+    document.getElementById('s-power').textContent    = wr;
+    document.getElementById('map-val').textContent    = mr;
+    document.getElementById('rpm-sel-val').textContent= rr;
+    document.getElementById('g-map').textContent      = mr;
+    document.getElementById('g-rpm').textContent      = rr;
+    document.getElementById('g-pwr').textContent      = wr;
+
+    setArc('g-map-arc', (mr-10)/20);
+    setArc('g-rpm-arc', (rr-1800)/900);
+    setArc('g-pwr-arc', wr/100);
+
+    // pitch sub-label
+    const ptEl = document.getElementById('pitch-type');
+    if(pr < 22){      ptEl.textContent='Fine pitch';  ptEl.style.color='#0e7a58'; }
+    else if(pr < 33){ ptEl.textContent='Mid pitch';   ptEl.style.color='#b07a10'; }
+    else {            ptEl.textContent='Coarse pitch'; ptEl.style.color='#4a42b0'; }
+
+    const phase = getPhase();
+    const exp   = getExplanation(phase, {MAP:mr, rpmSel:rr, pitch:pr, power:wr});
+    document.getElementById('explain-box').style.borderLeftColor = exp.color;
+    document.getElementById('explain-title').textContent = exp.title;
+    document.getElementById('explain-text').textContent  = exp.text;
+
+    // warning
+    const warn    = getWarning();
+    const warnBox = document.getElementById('warn-box');
+    if(warn){
+      warnBox.classList.add('visible');
+      document.getElementById('warn-title').textContent = warn.title;
+      document.getElementById('warn-text').textContent  = warn.text;
+    } else {
+      warnBox.classList.remove('visible');
+    }
+
+    // phase badge
+    const badge = document.getElementById('phase-badge');
+    if(warn){ badge.style.background='#fce8e8'; badge.style.color='#a82020'; badge.textContent='WARNING'; }
+    else {
+      const phases = {
+        climb:      {bg:'#d6f0e6',col:'#0e7a58',label:'CLIMB'},
+        cruise:     {bg:'#e4e2f8',col:'#4a42b0',label:'CRUISE'},
+        transition: {bg:'#fdf0d8',col:'#b07a10',label:'TRANSITION'}
+      };
+      const ph = phases[phase];
+      badge.style.background=ph.bg; badge.style.color=ph.col; badge.textContent=ph.label;
+    }
+
+    spin += (dispRPM/60)*Math.PI*2*dt;
+    drawProp(dispPitch);
+  }
+
+  function setupLever(trackId, thumbId, fillId, initPct, onChange){
+    const track = document.getElementById(trackId);
+    const thumb = document.getElementById(thumbId);
+    const fill  = document.getElementById(fillId);
+    let pct = initPct, dragging = false;
+
+    function apply(p){
+      pct = Math.max(0, Math.min(1, p));
+      thumb.style.bottom = (pct*78+6)+'%';
+      fill.style.height  = (pct*100)+'%';
+      onChange(pct);
+    }
+    apply(initPct);
+
+    function getY(e){ return e.touches ? e.touches[0].clientY : e.clientY; }
+    thumb.addEventListener('mousedown',  e=>{ dragging=true; e.preventDefault(); });
+    thumb.addEventListener('touchstart', e=>{ dragging=true; e.preventDefault(); });
+    window.addEventListener('mouseup',   ()=>dragging=false);
+    window.addEventListener('touchend',  ()=>dragging=false);
+    window.addEventListener('mousemove', e=>{ if(!dragging)return; const r=track.getBoundingClientRect(); apply(1-(getY(e)-r.top)/r.height); });
+    window.addEventListener('touchmove', e=>{ if(!dragging)return; const r=track.getBoundingClientRect(); apply(1-(getY(e)-r.top)/r.height); });
+    track.addEventListener('click', e=>{ const r=track.getBoundingClientRect(); apply(1-(e.clientY-r.top)/r.height); });
+  }
+
+  setupLever('thr-track','thr-thumb','thr-fill', 0.72, p=>{ thrPct=p; });
+  setupLever('prp-track','prp-thumb','prp-fill', 0.77, p=>{ propPct=p; });
+
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
